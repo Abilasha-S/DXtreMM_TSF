@@ -16,10 +16,76 @@ import sklearn.metrics
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import precision_recall_curve
 
-from multiclassification.MonotonicNN_outHz import MyMonotoneNN_3f, MyMonotoneNN_2f
+from networks.MonotonicNN_outHz import MyMonotoneNN, MyMonotoneNN_dim8, MyMonotoneNN_dim2
 from utils.distributions import mixed_loglikeli, loglog_function, sample_mixedGPD
-from utils.metrics import cross_entropy, get_predicted_label,  accuracy_per_class
+from utils.metrics import binary_cross_entropy
+
 from networks.autoregressive import MADE
+
+class Decoder(nn.Module):
+    def __init__(self, z_dim, hidden_layer_MNN, hidden_layers=[], loglogLink=False):
+        super(Decoder, self).__init__()
+        # input z
+        # output p(z|x)
+        if z_dim == 2:
+            self.mnn = MyMonotoneNN_dim2(1, hidden_layer_MNN)
+        if z_dim == 4: 
+            self.mnn = MyMonotoneNN(1, hidden_layer_MNN)
+        if z_dim == 8: 
+            self.mnn = MyMonotoneNN_dim8(1, hidden_layer_MNN)            
+        
+        net = []
+        hs = [1] + hidden_layers + [1]
+        for h0, h1 in zip(hs, hs[1:]):
+            net.extend([
+                nn.Linear(h0, h1),
+                nn.ReLU(),
+            ])
+        net.pop()  
+        net = nn.Sequential(*net)
+        self.net = net
+        if loglogLink:
+            self.out = loglog_function
+        else:
+            self.out = nn.Sigmoid()       
+        
+        
+    def forward(self, z, N, lower_bound, output_Hz = False):
+        if output_Hz:
+            mnn_result, Hz = self.mnn(z, N, lower_bound, output_Hz)
+            return self.out(mnn_result), Hz
+        else:
+            mnn_result = self.mnn(z, N, lower_bound)
+
+            return self.out(mnn_result)
+
+    
+class Decoder_VAE(nn.Module):
+    def __init__(self, z_dim, hidden_layers=[], loglogLink=False):
+        super(Decoder_VAE, self).__init__()
+        # input z
+        # output p(z|x)                
+        
+        net = []
+        hs = [z_dim] + hidden_layers + [1]
+        for h0, h1 in zip(hs, hs[1:]):
+            net.extend([
+                nn.Linear(h0, h1),
+                nn.ReLU(),
+            ])
+        net.pop()  
+        net = nn.Sequential(*net)
+        self.net = net
+        if loglogLink:
+            self.out = loglog_function
+        else:
+            self.out = nn.Sigmoid()       
+        
+        
+    def forward(self,z):
+        result = self.net(z)
+        
+        return self.out(result)
 
 class Encoder(nn.Module):
     def __init__(self, in_d, hidden_layers=[32,32], z_dim=4):
@@ -61,98 +127,6 @@ class Encoder(nn.Module):
         z, l = self.reparametrize(mu_, logvar_)
 
         return z, h_, l
-    
-class Decoder_multiclass(nn.Module):
-    def __init__(self, z_dim, n_category, hidden_layer_MNN, hidden_layers=[]):
-        super(Decoder_multiclass, self).__init__()
-        # input z
-        # output p(z|x)
-        # if z_dim == 2: 
-        #     self.mnn = MyMonotoneNN_dim2(1, hidden_layer_MNN)        
-        # if z_dim == 4: 
-        #     self.mnn = MyMonotoneNN(1, hidden_layer_MNN)
-        # if z_dim == 8: 
-        #     self.mnn = MyMonotoneNN_dim8(1, hidden_layer_MNN)            
-        # self.mnn = MyMonotoneNN_3f(hidden_layer_MNN, n_category=n_category)
-        self.mnn = MyMonotoneNN_2f(hidden_layer_MNN, n_category=n_category)
-#         net = []
-#         hs = [1] + hidden_layers + [1]
-#         for h0, h1 in zip(hs, hs[1:]):
-#             net.extend([
-#                 nn.Linear(h0, h1),
-#                 nn.ReLU(),
-#             ])
-#         net.pop()  
-#         net = nn.Sequential(*net)
-#         self.net = net      
-        
-        
-    def forward(self, z, N, lower_bound, output_Hz=False):
-        if output_Hz:
-            mnn_result, Hz = self.mnn(z, N, lower_bound, output_Hz)
-            return mnn_result, Hz
-        else:
-            mnn_result = self.mnn(z, N, lower_bound)
-            return mnn_result
-
-
-# class Decoder(nn.Module):
-#     def __init__(self, z_dim, hidden_layer_MNN, hidden_layers=[], loglogLink=False):
-#         super(Decoder, self).__init__()
-#         # input z
-#         # output p(z|x)
-#         if z_dim == 2:
-#             self.mnn = MyMonotoneNN_dim2(1, hidden_layer_MNN)
-#         if z_dim == 4: 
-#             self.mnn = MyMonotoneNN(1, hidden_layer_MNN)
-#         if z_dim == 8: 
-#             self.mnn = MyMonotoneNN_dim8(1, hidden_layer_MNN)            
-        
-#         net = []
-#         hs = [1] + hidden_layers + [1]
-#         for h0, h1 in zip(hs, hs[1:]):
-#             net.extend([
-#                 nn.Linear(h0, h1),
-#                 nn.ReLU(),
-#             ])
-#         net.pop()  
-#         net = nn.Sequential(*net)
-#         self.net = net
-#         if loglogLink:
-#             self.out = loglog_function
-#         else:
-#             self.out = nn.Sigmoid()       
-
-
-    
-class Decoder_VAE(nn.Module):
-    def __init__(self, z_dim, hidden_layers=[], loglogLink=False):
-        super(Decoder_VAE, self).__init__()
-        # input z
-        # output p(z|x)                
-        
-        net = []
-        hs = [z_dim] + hidden_layers + [3]
-        for h0, h1 in zip(hs, hs[1:]):
-            net.extend([
-                nn.Linear(h0, h1),
-                nn.ReLU(),
-            ])
-        net.pop()  
-        net = nn.Sequential(*net)
-        self.net = net
-        if loglogLink:
-            self.out = loglog_function
-        else:
-            # self.out = nn.Sigmoid()
-            self.out = nn.Softmax(dim=0)       
-        
-        
-    def forward(self,z):
-        result = self.net(z)
-        
-        return self.out(result)
-    
     
 # ref: https://www.ritchievink.com/blog/2019/11/12/another-normalizing-flow-inverse-autoregressive-flows/
 class AutoRegressiveNN(MADE):
@@ -211,10 +185,8 @@ class IAF(nn.Module):
         # fix the first part as standard normal
         
         self.mu0 = torch.zeros(z_dim).to(device)
-        # self.mu0 =torch.rand(z_dim).to(device)
         self.mu0 = torch.nn.Parameter(self.mu0)
-        self.logvar0 = torch.ones(z_dim).to(device)
-        # self.logvar0 =torch.rand(z_dim).to(device)
+        self.logvar0 = torch.zeros(z_dim).to(device)
         self.logvar0 = torch.nn.Parameter(self.logvar0)     
         
         self.xi_ =torch.rand(z_dim).to(device)
@@ -237,7 +209,7 @@ class IAF(nn.Module):
         best_z, h_, l_qzx = self.flow((z_init, h_, l_qzx_init))
         
         return best_z, l_qzx
-
+    
 # CVB critic
 class Nu(nn.Module):
     # take z as input also could take (x,z) as input
@@ -252,7 +224,6 @@ class Nu(nn.Module):
             hs = [z_dim+ncov] + hidden_layers + [1]
         for h0, h1 in zip(hs, hs[1:]):
             net.extend([
-                # nn.BatchNorm1d(h0),
                 nn.Linear(h0, h1),
 #                 nn.ReLU(),
                 nn.Softplus(),
@@ -295,7 +266,7 @@ def log_score_marginal(nu, z, mu, logvar, xi_, sigma_u, sigma_l, p_ = 0.95, p_l=
     
     # sample prior z
     n_samples = z.size()[0]
-    prior_z = sample_mixedGPD(n_samples,  mu, logvar, xi_, sigma_u, sigma_l, p_ = p_, p_l= p_l, eps=eps, device=device)
+    prior_z = sample_mixedGPD(n_samples,  mu, logvar, xi_, sigma_, p_ = p_, p_l=p_l, eps=eps, device=device)
     
     # nu(prior_z)
     pz_nu = torch.mean(torch.exp(nu(z=prior_z.float(),nu_lambda=nu_lambda)))
@@ -328,7 +299,7 @@ def log_score_marginal(nu, z, mu, logvar, xi_, sigma_u, sigma_l, p_ = 0.95, p_l=
         return z_nu, pz_nu,nanFlag
 
     
-def log_score(nu, x, z, mu, logvar, xi_, sigma_, p_ = 0.95, eps=1e-3, nu_lambda=1.0,device='cpu',train_nu=False, opt_nu=None, clipping_value = 1e-6):
+def log_score(nu, x, z, mu, logvar, xi_, sigma_, p_ = 0.95, eps=1e-3, nu_lambda=1.0,device='cpu',train_nu=False, opt_nu=None, clipping_value = 1e-3):
     # considering p(z) and q(z|x)
 
     # n: number of samples to draw
@@ -382,13 +353,11 @@ def log_score(nu, x, z, mu, logvar, xi_, sigma_, p_ = 0.95, eps=1e-3, nu_lambda=
 ################
 def pred_avg_risk_z(batched_x, eps_dim, IAF_flow, decoder, device, n_avg=20, N=100, lower_bound=-5.0):
     eps_ = (torch.Tensor( batched_x.shape[0], eps_dim).normal_()).to(device)
-    z_init, likelihood_qzx = IAF_flow(batched_x.float()) 
-    # z_init, likelihood_qzx = IAF_flow(batched_x.float(), eps_.float())    
+    z_init, likelihood_qzx = IAF_flow(batched_x.float(), eps_.float())    
     for i in range(n_avg-1):
         
         eps_ = (torch.Tensor( batched_x.shape[0], eps_dim).normal_()).to(device)
-        batch_z, likelihood_qzx = IAF_flow(batched_x.float())
-        # batch_z, likelihood_qzx = IAF_flow(batched_x.float(), eps_.float())
+        batch_z, likelihood_qzx = IAF_flow(batched_x.float(), eps_.float())
         z_init = batch_z + z_init
         likelihood_qzx = likelihood_qzx + likelihood_qzx
         
@@ -401,19 +370,18 @@ def pred_avg_risk(batched_x, eps_dim, IAF_flow, decoder, device, n_avg=20, N=100
     eps_ = (torch.Tensor( batched_x.shape[0], eps_dim).normal_()).to(device)
     z_init, likelihood_qzx = pred_avg_risk_z(batched_x, eps_dim, IAF_flow, decoder, device, n_avg=n_avg, N=N, lower_bound=lower_bound)
     pred_risk_init = decoder(z_init, N, lower_bound)
-    # pred_risk_init = decoder(z_init)
     for i in range(n_avg-1):
         
         eps_ = (torch.Tensor( batched_x.shape[0], eps_dim).normal_()).to(device)
         batch_z, likelihood_qzx = pred_avg_risk_z(batched_x, eps_dim, IAF_flow, decoder, device, n_avg=n_avg, N=N, lower_bound=lower_bound)
-        # pred_risk_batch = decoder(batch_z)
         pred_risk_batch = decoder(batch_z, N, lower_bound)
         pred_risk_init = pred_risk_batch + pred_risk_init
         likelihood_qzx = likelihood_qzx + likelihood_qzx
                 
     return pred_risk_init/n_avg, likelihood_qzx/n_avg
 
-def testing_VIEVT(train_test, run_count, dataset, IAF_flow, flow_path, decoder, decoder_path, nu, nu_path, model_name, result_path, eps_dim, L=100, N=100, u_bound=0.99, l_bound=0.01, lower_bound=-5.0,transform = None, norm_mean=0.0, norm_std=1.0, continuous_variables=[],roc_curv = False, pr_curv = False, saveResults=True, device='cpu'):
+def testing_VIEVT(dataset, IAF_flow, flow_path, decoder, decoder_path, nu, nu_path, model_name, result_path, eps_dim, L=100, N=100, u_bound=0.99, lower_bound=-5.0,transform = None, norm_mean=0.0, norm_std=1.0, continuous_variables=[],roc_curv = False, pr_curv = False, saveResults=True, device='cpu', BCE_Loss=False, limit_x=20):
+    # also present the BCE loss and Positive case loss
     IAF_flow.load_state_dict(torch.load(flow_path))
     IAF_flow.eval()
     decoder.load_state_dict(torch.load(decoder_path))
@@ -422,8 +390,8 @@ def testing_VIEVT(train_test, run_count, dataset, IAF_flow, flow_path, decoder, 
     nu.eval()        
     with torch.no_grad():
         input_size = dataset['x'].shape[1]
-        batched_x = dataset['x'].copy()
         if transform:
+            batched_x = dataset['x'].copy()
             batched_x[:,continuous_variables] = (dataset['x'].copy()[:,continuous_variables] - norm_mean)/norm_std
             n_samples = batched_x.shape[0]
             batched_x =  torch.tensor(batched_x)
@@ -431,51 +399,61 @@ def testing_VIEVT(train_test, run_count, dataset, IAF_flow, flow_path, decoder, 
             n_samples = batched_x.shape[0]
             batched_x =  torch.tensor(dataset['x'])
         batched_x = batched_x.to(device).view(-1, input_size)
+        
+        batched_x = torch.clamp(batched_x, max = limit_x, min=-12)
         batched_e =  torch.tensor(dataset['e']).to(device)
 
         
         eps_ = (torch.Tensor( n_samples, eps_dim).normal_()).to(device)
-        batch_z, likelihood_qzx = IAF_flow(batched_x.float())
-        # batch_z, likelihood_qzx = IAF_flow(batched_x.float(), eps_.float())
+        batch_z, likelihood_qzx = IAF_flow(batched_x.float(), eps_.float())
         assert (batch_z != batch_z).any()== False
-        # _ = decoder(batch_z)
         _, Hz = decoder(batch_z, N, lower_bound, output_Hz = True)
         # add average over eps_ to increase accuracy
         pred_risk_batch, likelihood_qzx= pred_avg_risk(batched_x, eps_dim, IAF_flow, decoder, device, n_avg=20)
         
         assert (pred_risk_batch != pred_risk_batch).any()== False
         
-        recon_loss, class_acc_, cm = cross_entropy(pred_risk_batch.float(), batched_e.squeeze().detach().long(), sample_weight=None, class_acc=True)
+        recon_loss = binary_cross_entropy(pred_risk_batch.float(), \
+                                 batched_e.detach().float(), sample_weight=None)
 
         # based on marginal q
-        z_nu, pz_nu,nanFlag = log_score_marginal(nu=nu, z=batch_z, mu=IAF_flow.mu0, logvar=IAF_flow.logvar0, \
+        z_nu, pz_nu,nanFlag = log_score_marginal(nu=nu, z=best_z, mu=IAF_flow.mu0, logvar=IAF_flow.logvar0, \
                             xi_=IAF_flow.xi_, sigma_u=IAF_flow.sigma_u, sigma_l=IAF_flow.sigma_l,\
-                            p_ = u_bound, p_l=l_bound, eps=1e-3, device=device, train_nu=False)
-
-        # print("parameters",IAF_flow.mu0, (IAF_flow.logvar0.exp()+1e-4).sqrt(), IAF_flow.sigma_u, IAF_flow.sigma_l, IAF_flow.xi_)
+                            p_ = u_bound, p_l=l_bound, eps=1e-3, nu_lambda=nu_lambda,device=device, train_nu=False)
 
         data_loss = (recon_loss + z_nu - pz_nu).item()
-        # calculating F1 score
-        pred_label = get_predicted_label(pred_risk_batch.detach().cpu())
-        test_F1 = sklearn.metrics.f1_score(pred_label,\
-                            batched_e.cpu().squeeze().detach().long(),average='micro')
-    print('====> {} set loss: {:.4f}, reconstruction loss: {:.4f}'.format(train_test, data_loss, recon_loss.item()))
-    print('====> {} Class Accuracy: {}, F1 score: {:.4f}, confusion matrix:{}'.format(train_test, class_acc_, test_F1, cm))
+        pred_risk_batch = np.vstack(pred_risk_batch.cpu()).reshape(-1)
+#         pred_label_batch = get_predicted_label(pred_risk_batch)
+#         # overall accuracy
+#         overall_acc = np.mean(pred_label_batch==np.array(dataset['e']))
+#         # percentage of predicted accuracy for patients with events only
+#         event_idx = np.where(np.array(dataset['e'])==1)
+#         pos_acc = np.mean(pred_label_batch[event_idx]==1)
+        auc_ = sklearn.metrics.roc_auc_score(dataset['e'],pred_risk_batch)
+        fpr_, tpr_, _ = sklearn.metrics.roc_curve(dataset['e'],pred_risk_batch)
+        
+        precision_, recall_, thresholds_ = precision_recall_curve(dataset['e'],pred_risk_batch)
+#         f1_score_ = F1_score(precision_, recall_, beta=1.0)
+        auprc_ = average_precision_score(dataset['e'],pred_risk_batch)
 
+    print('====> Test set loss: {:.4f}, reconstruction loss: {:.4f}'.format(data_loss, recon_loss.item()))
+#     print('====> Test overall Accuracy: {:.4f}, Positive Cases Accuracy: {:.4f}'.format(overall_acc, pos_acc))
+    print('====> Test AUC score: {:.4f}'.format(auc_))
+    print('====> Test AUPRC score: {:.4f}'.format(auprc_))
 #     print('====> Test F1 score: {:.4f}'.format(f1_score_ ))
 
     
     if saveResults:
-        np.save(result_path+'/_risk_'+train_test+model_name+str(run_count), pred_risk_batch.cpu())
+        np.save(result_path+'/test_risk_'+model_name, pred_risk_batch)
     
     if roc_curv:
         roc_curv_ = (fpr_, tpr_)
         pr_curv_ = (precision_, recall_)
         return auc_, roc_curv_, auprc_, pr_curv_
-
+    if BCE_Loss:
+        return pred_risk_batch,batch_z, Hz, auc_, auprc_, recon_loss.item(), pos_recon_.item()
     else:
-        return pred_risk_batch,batch_z, class_acc_, test_F1, np.diag(cm)/np.sum(cm, axis = 0)
-        # return pred_risk_batch,batch_z, Hz, class_acc_, test_F1
+        return pred_risk_batch,batch_z, Hz, auc_, auprc_
     
     
 def testing_VIEVT_balanced(dataset, IAF_flow, flow_path, decoder, decoder_path, nu, nu_path, model_name, result_path, eps_dim, L=100, N=100, u_bound=0.99, lower_bound=-5.0,transform = None, norm_mean=0.0, norm_std=1.0, continuous_variables=[],roc_curv = False, pr_curv = False, saveResults=True, device='cpu'):
@@ -490,6 +468,7 @@ def testing_VIEVT_balanced(dataset, IAF_flow, flow_path, decoder, decoder_path, 
     auprc_list = []
     recon_list = []
     pos_recon_list = []    
+    # calculating balanced auc, auprc, recon loss and positive loss
     for i in range(10):
         with torch.no_grad():
             n_samples, input_size = dataset['x'].shape

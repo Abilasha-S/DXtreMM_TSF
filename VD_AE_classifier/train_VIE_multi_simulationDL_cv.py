@@ -41,6 +41,12 @@ from sklearn.model_selection import TimeSeriesSplit
 
 from pathlib import Path
 
+use_cuda = torch.cuda.is_available()
+if use_cuda:
+    print('__CUDNN VERSION:', torch.backends.cudnn.version())
+    print('__Number CUDA Devices:', torch.cuda.device_count())
+    print('__CUDA Device Name:',torch.cuda.get_device_name(0))
+    print('__CUDA Device Total Memory [GB]:',torch.cuda.get_device_properties(0).total_memory/1e9)
 
 file_path = './data/'
 result_path_root = './results/'+"multi/"+"simulationDL"+'/'
@@ -53,26 +59,37 @@ hidden_layer_MNN = [32,32]
 
 seed=123
 
+
+##=================Things to change ===========
+
+data_name='B_SPI_testing'
+lag=9
+num_prev = 5
+num_next = 5
+df = pd.read_csv('B_SPI_testing.csv')
+time_series = df['SPI1'].to_numpy()
+
+##==============================================
+
 # data_name = 'seattle'
 # data_name = 'pr_1901_2020_IND'
 # data_name = 'Metro_Interstate_Traffic_Volume'
 # data_name = 'co2_mm_mlo'
 # data_name = 'ETTh1'
 # data_name='nyc-yellow-taxi'
-data_name='nasdaq100_padding'
-
+#data_name='nasdaq100_padding'
 # er005
 # cut_bound=0.10
 # df, continuous_variables = generate_data(file_path, result_path_root, cut_bounds, seed)
 # print(count_rates(df['e']))
 
 # lag=47
-lag=9
-num_prev = 5
-num_next = 5
+#lag=9
+#num_prev = 5
+#num_next = 5
 # df = pd.read_csv('/home/abilasha/Downloads/extreme_pred/upload/Data/Metro_Interstate_Traffic_Volume/Metro_Interstate_Traffic_Volume.csv')
 # df = pd.read_csv('/home/abilasha/Downloads/extreme_pred/upload/Data/co2_mm_mlo.csv')
-df = pd.read_csv('/home/abilasha/Downloads/extreme_pred/upload/Data/nasdaq100/nasdaq100/small/nasdaq100_padding.csv')
+#df = pd.read_csv('/home/abilasha/Downloads/extreme_pred/upload/Data/nasdaq100/nasdaq100/small/nasdaq100_padding.csv')
 # df = pd.read_csv('/home/abilasha/Downloads/extreme_pred/upload/Data/ETDataset/ETT-small/ETTh1.csv')
 # df = pd.read_csv('/home/abilasha/Downloads/extreme_pred/upload/Data/rainfall/seattle.csv')
 # df = pd.read_csv('/home/abilasha/Downloads/extreme_pred/upload/Data/rainfall/pr_1901_2020_IND.csv')
@@ -82,7 +99,7 @@ df = pd.read_csv('/home/abilasha/Downloads/extreme_pred/upload/Data/nasdaq100/na
 # time_series = df['Rainfall'].to_numpy()
 # time_series = df['traffic_volume'].to_numpy()
 # time_series = df['de-seasonalized'].to_numpy()
-time_series = df['AAPL'].to_numpy()
+#time_series = df['AAPL'].to_numpy()
 # time_series = df['OT'].to_numpy()
 # time_series = df['count'].to_numpy()
 
@@ -244,8 +261,8 @@ for (train_low, train_high), (test_low, test_high) in train_test_ranges:
     N = 10
 
     IAF_flow = IAF(input_size, z_dim=z_dim, h_dim=z_dim, hidden_layers=hidden_layers, nstep=5, device=device)
-    # decoder = Decoder_multiclass(z_dim=z_dim, n_category=n_cat,hidden_layer_MNN=hidden_layer_MNN)
-    decoder = Decoder_VAE(z_dim=z_dim, hidden_layers=[32,32])
+    decoder = Decoder_multiclass(z_dim=z_dim, n_category=n_cat,hidden_layer_MNN=hidden_layer_MNN)
+    # decoder = Decoder_VAE(z_dim=z_dim, hidden_layers=[32,32])
     nu = Nu(z_dim=z_dim, ncov=ncov, hidden_layers=[32,32], marginal=True)
 
     decoder.to(device)
@@ -274,6 +291,7 @@ for (train_low, train_high), (test_low, test_high) in train_test_ranges:
     # validation on the original scale
     valid_loader = DataLoader(EVT_valid, batch_size=10000, shuffle=True)
 
+    print("Dataloading done")
 
     del train
     ## define aggressive training
@@ -312,7 +330,7 @@ for (train_low, train_high), (test_low, test_high) in train_test_ranges:
         
         return loss.item()
 
-
+    print("start training")
     # training process
 
     if __name__ == "__main__":
