@@ -1,6 +1,6 @@
 # DXtreMM_TSF
 
-Repository for paper, "Deep Extreme Mixture Model for Time series forecasting"
+Repository for paper, "Deep Extreme Mixture Model for Time series forecasting", CIKM, 2022
 
 This provides implementation of VD-AE classifier model and forecaster modules
 
